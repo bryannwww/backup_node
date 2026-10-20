@@ -1,0 +1,16 @@
+[
+  {
+    "_id": "6ad7cc6148cba622f30665b1",
+    "cliente": "prueba2@gmail.com",
+    "plato": "CENA ROMANTICA",
+    "mesa": "MESA 1",
+    "fecha": "2026-10-20",
+    "hora": "19:00",
+    "cantidad_personas": 2,
+    "estado": "Confirmada",
+    "usuarioId": "6ad7cc4a48cba622f30665b0",
+    "createdAt": "2026-10-20T20:17:37.726Z",
+    "updatedAt": "2026-10-20T20:17:37.726Z",
+    "__v": 0
+  }
+]

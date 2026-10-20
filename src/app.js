@@ -1,8 +1,12 @@
 // src/app.js
+const path = require('path');
+require('dotenv').config({ path: path.join(process.cwd(), '.env') });
+
 const express = require('express');
 const session = require('express-session');
 const bcrypt = require('bcryptjs');
 const cron = require('node-cron');
+const mongoose = require('mongoose');
 
 // Importaciones de MongoDB (Mongoose) y Configuración
 const Usuario = require('./models/Usuario');
@@ -12,9 +16,6 @@ const backup = require('./servicios/backup');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-
-// Conectar a la base de datos MongoDB
-conectarBD();
 
 // Configuración de vistas EJS
 app.set('view engine', 'ejs');
@@ -39,13 +40,6 @@ const verificarAuth = (req, res, next) => {
 
 // Archivos estáticos
 app.use(express.static('public'));
-
-// --- TAREA PROGRAMADA (PRUEBA CADA MINUTO) ---
-// Cambia '* * * * *' a '0 0 * * *' cuando quieras que se ejecute solo a la medianoche
-cron.schedule('* * * * *', async () => {
-    console.log('🔄 Ejecutando prueba de copia de seguridad...');
-    await backup.backupDatabase();
-});
 
 // --- RUTAS DE LA APLICACIÓN ---
 
@@ -74,6 +68,32 @@ app.post('/login', async (req, res) => {
 
         req.session.usuarioId = usuario._id;
         req.session.email = usuario.email;
+
+        // Si el usuario intentó hacer una reserva desde el inicio antes de loguearse:
+        if (req.session.reservaPendiente) {
+            const pendiente = req.session.reservaPendiente;
+            delete req.session.reservaPendiente;
+
+            const mesaFinal = pendiente.mesa ? String(pendiente.mesa).trim() : '1';
+            const personas = pendiente.cantidad_personas ? Number(pendiente.cantidad_personas) : 1;
+            const fechaHora = pendiente.fecha ? `(${pendiente.fecha}${pendiente.hora ? ' ' + pendiente.hora : ''})` : '';
+            const platoFinal = (pendiente.plato && pendiente.plato.trim() !== '') 
+                ? pendiente.plato.trim() 
+                : `Reserva para ${personas} Pers. ${fechaHora}`.trim();
+
+            await Reserva.create({
+                cliente: (pendiente.cliente && pendiente.cliente.trim() !== '') ? pendiente.cliente.trim() : usuario.email,
+                plato: platoFinal,
+                mesa: mesaFinal,
+                fecha: pendiente.fecha || new Date().toISOString().split('T')[0],
+                hora: pendiente.hora || '19:00',
+                cantidad_personas: personas,
+                estado: 'Confirmada',
+                usuarioId: usuario._id
+            });
+            console.log(`✅ Reserva pendiente creada tras iniciar sesión para: ${usuario.email}`);
+        }
+
         res.redirect('/dashboard');
     } catch (error) {
         console.error(error);
@@ -110,29 +130,51 @@ app.post('/register', async (req, res) => {
 // 4. Dashboard (Protegido)
 app.get('/dashboard', verificarAuth, async (req, res) => {
     try {
-        const reservas = await Reserva.find({ usuarioId: req.session.usuarioId });
+        const reservas = await Reserva.find({ usuarioId: req.session.usuarioId }).sort({ createdAt: -1 });
         res.render('dashboard', { reservas, email: req.session.email });
     } catch (error) {
-        console.error(error);
+        console.error('Error al cargar panel:', error);
         res.status(500).send("Error cargando el panel");
     }
 });
 
-// 5. Crear Reserva (Protegido)
-app.post('/reservas/crear', verificarAuth, async (req, res) => {
+// 5. Crear Reserva
+app.post('/reservas/crear', async (req, res) => {
     try {
-        const { fecha, hora, cantidad_personas, mesa } = req.body;
-        
-        await Reserva.create({
-            cliente: req.session.email,
-            plato: `Mesa ${mesa} ${cantidad_personas} Pers. (${fecha} ${hora})`,
-            mesa,
+        // Si no ha iniciado sesión, guardamos los datos para crearlos luego de que inicie sesión
+        if (!req.session.usuarioId) {
+            req.session.reservaPendiente = req.body;
+            return res.redirect('/login');
+        }
+
+        const { cliente, plato, mesa, fecha, hora, cantidad_personas } = req.body;
+
+        const clienteFinal = (cliente && cliente.trim() !== '') ? cliente.trim() : req.session.email;
+        const mesaFinal = (mesa && String(mesa).trim() !== '') ? String(mesa).trim() : '1';
+        const personas = cantidad_personas ? Number(cantidad_personas) : 1;
+
+        let platoFinal = (plato && plato.trim() !== '') ? plato.trim() : null;
+        if (!platoFinal) {
+            const fechaHora = fecha ? `(${fecha}${hora ? ' ' + hora : ''})` : '';
+            platoFinal = `Reserva para ${personas} Pers. ${fechaHora}`.trim();
+        }
+
+        const nuevaReserva = await Reserva.create({
+            cliente: clienteFinal,
+            plato: platoFinal,
+            mesa: mesaFinal,
+            fecha: fecha || new Date().toISOString().split('T')[0],
+            hora: hora || '19:00',
+            cantidad_personas: personas,
+            estado: 'Confirmada',
             usuarioId: req.session.usuarioId
         });
+
+        console.log(`✅ Reserva guardada con éxito: ${clienteFinal} - Mesa: ${mesaFinal} (${nuevaReserva._id})`);
         res.redirect('/dashboard');
     } catch (error) {
-        console.error(error);
-        res.status(500).send("Error al crear reserva");
+        console.error('❌ Error al crear reserva:', error);
+        res.status(500).send(`Error al crear reserva: ${error.message}`);
     }
 });
 
@@ -143,7 +185,29 @@ app.get('/logout', (req, res) => {
     });
 });
 
-// Arrancar Servidor Express
-app.listen(PORT, () => {
-    console.log(`🚀 ReserVa Pro corriendo en http://localhost:${PORT}`);
-});
+// --- INICIALIZACIÓN DEL SERVIDOR Y TAREAS PROGRAMADAS ---
+async function iniciarServidor() {
+    try {
+        // 1. Primero conectar a la base de datos de manera explícita
+        await conectarBD();
+
+        // 2. Tarea programada (Cada minuto)
+        cron.schedule('*/5 * * * *', async () => {
+            console.log('🔄 Ejecutando tarea programada de copia de seguridad...');
+            await backup.backupDatabase();
+        });
+
+        // 3. Levantar el servidor Express
+        app.listen(PORT, async () => {
+            console.log(`🚀 ReserVa Pro corriendo en http://localhost:${PORT}`);
+            // Ejecutar una prueba inmediata AHORA QUE SÍ HAY CONEXIÓN A MONGODB
+            console.log('🧪 Ejecutando prueba de respaldo inicial...');
+            await backup.backupDatabase();
+        });
+
+    } catch (error) {
+        console.error('❌ Error crítico al iniciar la aplicación:', error.message);
+    }
+}
+
+iniciarServidor();

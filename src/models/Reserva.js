@@ -3,19 +3,35 @@ const mongoose = require('mongoose');
 const reservaSchema = new mongoose.Schema({
     cliente: {
         type: String,
-        required: true
+        required: true,
+        trim: true
     },
     plato: {
         type: String,
-        required: true
+        required: true,
+        default: 'General',
+        trim: true
     },
     mesa: {
+        type: String, // Permite tanto números ("1", "2") como áreas ("Interior", "Terraza", "VIP")
+        required: true,
+        trim: true
+    },
+    fecha: {
+        type: String,
+        default: () => new Date().toISOString().split('T')[0]
+    },
+    hora: {
+        type: String,
+        default: '19:00'
+    },
+    cantidad_personas: {
         type: Number,
-        required: true
+        default: 1
     },
     estado: {
         type: String,
-        default: 'Pendiente'
+        default: 'Confirmada'
     },
     usuarioId: {
         type: mongoose.Schema.Types.ObjectId,

@@ -1,0 +1,18 @@
+[
+  {
+    "_id": "6ad7ca011326cc7ba4abbfe0",
+    "email": "prueba@gmail.com",
+    "password": "$2b$10$84S7DvQ/iLc3Dr6hv3QkJ.pasl292yJv3FqB2xCPHNs71Ka/Z7W2i",
+    "createdAt": "2026-10-20T20:07:29.551Z",
+    "updatedAt": "2026-10-20T20:07:29.551Z",
+    "__v": 0
+  },
+  {
+    "_id": "6ad7cc4a48cba622f30665b0",
+    "email": "prueba2@gmail.com",
+    "password": "$2b$10$CrbvJZP77EVMWFy2M.Wn1.AbWkpaVBk2Ty3mMHUMHszzAJQQSEzx6",
+    "createdAt": "2026-10-20T20:17:14.504Z",
+    "updatedAt": "2026-10-20T20:17:14.504Z",
+    "__v": 0
+  }
+]
