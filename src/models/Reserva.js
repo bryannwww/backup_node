@@ -1,33 +1,27 @@
-const { DataTypes } = require('sequelize');
-const sequelize = require('../config/database');
-const Usuario = require('./Usuario');
+const mongoose = require('mongoose');
 
-const Reserva = sequelize.define('Reserva', {
-    id: {
-        type: DataTypes.INTEGER,
-        autoIncrement: true,
-        primaryKey: true
-    },
+const reservaSchema = new mongoose.Schema({
     cliente: {
-        type: DataTypes.STRING,
-        allowNull: false
+        type: String,
+        required: true
     },
     plato: {
-        type: DataTypes.STRING,
-        allowNull: false
+        type: String,
+        required: true
     },
     mesa: {
-        type: DataTypes.INTEGER,
-        allowNull: false
+        type: Number,
+        required: true
     },
     estado: {
-        type: DataTypes.STRING,
-        defaultValue: 'Pendiente'
+        type: String,
+        default: 'Pendiente'
+    },
+    usuarioId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Usuario',
+        required: true
     }
-});
+}, { timestamps: true });
 
-// Relación: Un usuario puede tener muchas reservas (Foreign Key automática)
-Usuario.hasMany(Reserva, { foreignKey: 'usuarioId', onDelete: 'CASCADE' });
-Reserva.belongsTo(Usuario, { foreignKey: 'usuarioId' });
-
-module.exports = { sequelize, Usuario, Reserva };
+module.exports = mongoose.model('Reserva', reservaSchema);
